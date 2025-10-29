@@ -1,0 +1,241 @@
+
+
+
+/* ==========================================================
+3. les employés masculins par ordre d'ancienneté dont le salaire net (salaire + commissions)>= 8000.
+
+Modification de l'entité Employé en ajoutant le Genre (M/F)
+Mettre à jour les insertions 
+Exécuter le script complet
+========================================================== */
+– Ajout de la colonne Genre
+
+ALTER TABLE EMPLOYEES 
+ADD COLUMN GENDER CHAR(1) 
+CHECK (GENDER IN ('M', 'F'));
+
+—------------------------------------------------------------
+– Insertion des valeurs de Genre selon les noms
+
+UPDATE EMPLOYEES SET GENDER = 'F' WHERE FIRST_NAME IN ('Nancy', 'Laura', 'Margaret', 'Janet', 'Anne');
+UPDATE EMPLOYEES SET GENDER = 'M' WHERE FIRST_NAME IN ('Andrew', 'Steven', 'Michael', 'Robert');
+—-----------------------------------------------------------
+– Executer la requete
+
+SELECT     
+    EMPLOYEE_int AS EmployeeNumber,
+    CONCAT(FIRST_NAME, ' ', LAST_NAME) AS FullName,
+    TIMESTAMPDIFF(YEAR, BIRTH_DATE, CURDATE()) AS Age,
+    TIMESTAMPDIFF(YEAR, HIRE_DATE, CURDATE()) AS SeniorityYears,
+    (SALARY + IFNULL(COMMISSION,0)) AS Net_Salary
+FROM EMPLOYEES
+WHERE GENDER = 'M'
+  AND (SALARY + IFNULL(COMMISSION,0)) >= 8000
+ORDER BY SeniorityYears DESC;
+
+
+/* ==========================================================
+4. Vérification progressive des critères C1 à C5
+   Objectif : Identifier les produits répondant à certaines
+   conditions avant combinaison finale.
+   ========================================================== */
+
+
+/* ==========================================================
+   C1 — Produits conditionnés en bouteille(s)
+   ----------------------------------------------------------
+   Condition : QUANTITY contient le mot "bottle"
+   ========================================================== */
+SELECT 
+    PRODUCT_REF AS ProductNumber,
+    PRODUCT_NAME AS ProductName,
+    QUANTITY AS Packaging
+FROM PRODUCTS
+WHERE QUANTITY LIKE '%bottle%';
+
+
+
+/* ==========================================================
+   C2 — Troisième caractère du nom = 't' ou 'T'
+   ----------------------------------------------------------
+   Condition : Le 3e caractère du nom du produit est t ou T
+   ========================================================== */
+SELECT 
+    PRODUCT_REF AS ProductNumber,
+    PRODUCT_NAME AS ProductName
+FROM PRODUCTS
+WHERE SUBSTRING(PRODUCT_NAME, 3, 1) IN ('t', 'T');
+
+
+
+/* ==========================================================
+   C3 — Fournisseur : 1, 2 ou 3
+   ----------------------------------------------------------
+   Condition : Produit livré par les fournisseurs 1, 2 ou 3
+   ========================================================== */
+SELECT 
+    PRODUCT_REF AS ProductNumber,
+    PRODUCT_NAME AS ProductName,
+    SUPPLIER_int AS SupplierNumber
+FROM PRODUCTS
+WHERE SUPPLIER_int IN (1, 2, 3);
+
+
+
+/* ==========================================================
+   C4 — Prix unitaire compris entre 70 et 200
+   ----------------------------------------------------------
+   Condition : UNIT_PRICE entre 70 et 200 inclus
+   ========================================================== */
+SELECT 
+    PRODUCT_REF AS ProductNumber,
+    PRODUCT_NAME AS ProductName,
+    UNIT_PRICE AS UnitPrice
+FROM PRODUCTS
+WHERE UNIT_PRICE BETWEEN 70 AND 200;
+
+
+
+/* ==========================================================
+   C5 — Quantité commandée spécifiée (non nulle)
+   ----------------------------------------------------------
+   Condition : Le produit apparaît dans ORDER_DETAILS
+               avec une quantité renseignée
+   ========================================================== */
+SELECT 
+    p.PRODUCT_REF AS ProductNumber,
+    p.PRODUCT_NAME AS ProductName,
+    od.QUANTITY AS QuantityOrdered
+FROM PRODUCTS p
+JOIN ORDER_DETAILS od 
+    ON p.PRODUCT_REF = od.PRODUCT_REF
+WHERE od.QUANTITY IS NOT NULL;
+
+
+/* ==========================================================
+5. Clients habitant la même région que le fournisseur 1
+   (même pays, même ville et 3 derniers chiffres du code postal)
+   ========================================================== */
+
+SELECT *
+FROM CUSTOMERS c
+WHERE (c.COUNTRY, c.CITY, RIGHT(c.POSTAL_CODE, 3)) = (
+    SELECT COUNTRY, CITY, RIGHT(POSTAL_CODE, 3)
+    FROM SUPPLIERS
+    WHERE SUPPLIER_int = 1
+);
+
+/* ==========================================================
+6. Calcul des nouveaux taux de remise selon le montant
+        des commandes et note d’application
+   ========================================================== */
+
+SELECT 
+    od.ORDER_int AS OrderNumber,
+    CASE 
+        WHEN (od.UNIT_PRICE * od.QUANTITY) BETWEEN 0 AND 2000 THEN '0%'
+        WHEN (od.UNIT_PRICE * od.QUANTITY) BETWEEN 2001 AND 10000 THEN '5%'
+        WHEN (od.UNIT_PRICE * od.QUANTITY) BETWEEN 10001 AND 40000 THEN '10%'
+        WHEN (od.UNIT_PRICE * od.QUANTITY) BETWEEN 40001 AND 80000 THEN '15%'
+        ELSE '20%'
+    END AS New_Discount_Rate,
+    CASE 
+        WHEN od.ORDER_int BETWEEN 10000 AND 10999 THEN 'Apply old discount rate'
+        ELSE 'Apply new discount rate'
+    END AS Discount_Application_Note
+FROM ORDER_DETAILS od
+WHERE od.ORDER_int BETWEEN 10998 AND 11003;
+
+
+/* ==========================================================
+7. Fournisseurs de produits de la catégorie “Boissons”
+   ========================================================== */
+
+SELECT DISTINCT 
+    s.SUPPLIER_int AS SupplierNumber, 
+    s.COMPANY, 
+    s.ADDRESS, 
+    s.PHONE
+FROM SUPPLIERS s
+JOIN PRODUCTS p ON s.SUPPLIER_int = p.SUPPLIER_int
+JOIN CATEGORIES c ON p.CATEGORY_CODE = c.CATEGORY_CODE
+WHERE c.CATEGORY_NAME = 'Beverages';
+
+
+/* ==========================================================
+8. Clients de Berlin ayant commandé au plus un dessert
+   ========================================================== */
+
+SELECT c.CUSTOMER_CODE
+FROM CUSTOMERS c
+JOIN ORDERS o ON c.CUSTOMER_CODE = o.CUSTOMER_CODE
+JOIN ORDER_DETAILS od ON o.ORDER_int = od.ORDER_int
+JOIN PRODUCTS p ON od.PRODUCT_REF = p.PRODUCT_REF
+JOIN CATEGORIES cat ON p.CATEGORY_CODE = cat.CATEGORY_CODE
+WHERE c.CITY = 'Berlin' 
+  AND cat.CATEGORY_NAME = 'Desserts'
+GROUP BY c.CUSTOMER_CODE
+HAVING COUNT(DISTINCT p.PRODUCT_REF) <= 1;
+
+
+/* ==========================================================
+9. Clients français et total des commandes passées
+        les lundis d’avril 1998
+   ========================================================== */
+
+SELECT 
+    c.CUSTOMER_CODE, 
+    c.COMPANY, 
+    c.PHONE, 
+    c.COUNTRY,
+    IFNULL(SUM(od.UNIT_PRICE * od.QUANTITY * (1 - od.DISCOUNT)), 0) AS Total_Amount
+FROM CUSTOMERS c
+LEFT JOIN ORDERS o ON c.CUSTOMER_CODE = o.CUSTOMER_CODE
+LEFT JOIN ORDER_DETAILS od ON o.ORDER_int = od.ORDER_int
+WHERE c.COUNTRY = 'France'
+  AND MONTH(o.ORDER_DATE) = 4
+  AND YEAR(o.ORDER_DATE) = 1998
+  AND DAYOFWEEK(o.ORDER_DATE) = 2
+GROUP BY c.CUSTOMER_CODE, c.COMPANY, c.PHONE, c.COUNTRY;
+
+
+/* ==========================================================
+10. Clients ayant commandé tous les produits disponibles
+   ========================================================== */
+
+SELECT 
+    c.CUSTOMER_CODE, 
+    c.COMPANY, 
+    c.PHONE
+FROM CUSTOMERS c
+JOIN ORDERS o ON c.CUSTOMER_CODE = o.CUSTOMER_CODE
+JOIN ORDER_DETAILS od ON o.ORDER_int = od.ORDER_int
+GROUP BY c.CUSTOMER_CODE, c.COMPANY, c.PHONE
+HAVING COUNT(DISTINCT od.PRODUCT_REF) = (
+    SELECT COUNT(*) FROM PRODUCTS
+);
+
+
+/* ==========================================================
+11. Nombre de commandes par client français
+   ========================================================== */
+
+SELECT 
+    c.CUSTOMER_CODE, 
+    COUNT(o.ORDER_int) AS Number_of_Orders
+FROM CUSTOMERS c
+LEFT JOIN ORDERS o ON c.CUSTOMER_CODE = o.CUSTOMER_CODE
+WHERE c.COUNTRY = 'France'
+GROUP BY c.CUSTOMER_CODE;
+
+
+/* ==========================================================
+12. Comparaison du nombre de commandes entre 1996 et 1997
+   ========================================================== */
+
+SELECT 
+  SUM(CASE WHEN YEAR(ORDER_DATE) = 1996 THEN 1 ELSE 0 END) AS Orders_1996,
+  SUM(CASE WHEN YEAR(ORDER_DATE) = 1997 THEN 1 ELSE 0 END) AS Orders_1997,
+  (SUM(CASE WHEN YEAR(ORDER_DATE) = 1997 THEN 1 ELSE 0 END) - 
+   SUM(CASE WHEN YEAR(ORDER_DATE) = 1996 THEN 1 ELSE 0 END)) AS Difference
+FROM ORDERS;
